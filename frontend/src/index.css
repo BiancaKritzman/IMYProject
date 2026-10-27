@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --bg-main: #f9f6f0;
+  --bg-card: #fffdf9;
+  --bg-input: #f4efe6;
+  --text-main: #2b2118;
+  --text-muted: #6e6052;
+  --accent-brown: #4a382a;
+  --accent-hover: #31241a;
+  --accent-warm: #d9a05b;
+  --border-color: #e6ded3;
+  --shadow-subtle: 0 4px 20px rgba(43, 33, 24, 0.05);
+  --font-heading: 'Playfair Display', Georgia, serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: var(--font-body);
+  }
+
+  body {
+    @apply m-0 bg-[#f9f6f0] text-[#2b2118] antialiased;
+    font-family: var(--font-body);
+    line-height: 1.6;
+  }
+
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    color: var(--text-main);
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  input,
+  textarea {
+    font: inherit;
+  }
+}
+
+
