@@ -14,6 +14,7 @@ function ProfilePage() {
   const resolvedId = userIdAliases[String(id)] || String(id);
 
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [currentUserName, setCurrentUserName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [profileInfo, setProfileInfo] = useState({
     username: 'Loading...',
@@ -31,7 +32,12 @@ function ProfilePage() {
   const [editingAlbumId, setEditingAlbumId] = useState(null);
   const [friendTargetId, setFriendTargetId] = useState('');
 
+  const isAdmin = String(currentUserName || '').trim().toLowerCase() === 'test' || Boolean((localStorage.getItem('currentUser') && JSON.parse(localStorage.getItem('currentUser'))?.isAdmin));
   const isOwnProfile = currentUserId ? String(currentUserId) === String(resolvedId) : false;
+  const isFriendWithProfile = currentUserId
+    ? (allUsers.length > 0 && (friendsList.some((friend) => String(friend.id) === String(currentUserId)) || ((currentUserId && resolvedId && currentUserId !== resolvedId) && (allUsers.find((user) => String(user._id || user.id) === String(currentUserId))?.friends || []).includes(String(resolvedId)))) )
+    : false;
+  const canSeeFullProfile = isOwnProfile || isAdmin || isFriendWithProfile;
   const availableUsers = allUsers.filter((user) => {
     const userKey = String(user._id || user.id);
     return userKey !== String(currentUserId) && !friendsList.some((friend) => String(friend.id) === userKey);
@@ -42,6 +48,7 @@ function ProfilePage() {
       const storedUser = localStorage.getItem('currentUser');
       const currentSessionUser = storedUser ? JSON.parse(storedUser) : null;
       const signedInUserId = currentSessionUser?._id || currentSessionUser?.id || null;
+      const signedInUserName = currentSessionUser?.name || '';
 
       const res = await fetch('/api/social-data');
       if (!res.ok) throw new Error('Failed to fetch profile data');
@@ -85,6 +92,14 @@ function ProfilePage() {
         })
         .filter(Boolean);
 
+      const currentUserIsFriend = signedInUserId
+        ? friendships.some((friendship) => {
+            const left = String(friendship.userId) === String(signedInUserId) && String(friendship.friendId) === String(resolvedId);
+            const right = String(friendship.userId) === String(resolvedId) && String(friendship.friendId) === String(signedInUserId);
+            return left || right;
+          })
+        : false;
+
       const friendOptions = signedInUserId
         ? users.filter((user) => {
             const userKey = String(user._id || user.id);
@@ -93,6 +108,7 @@ function ProfilePage() {
         : [];
 
       setCurrentUserId(signedInUserId || null);
+      setCurrentUserName(signedInUserName || '');
       setAllUsers(users);
       setProfileInfo({
         username: userDisplayName,
@@ -111,6 +127,10 @@ function ProfilePage() {
         setFriendTargetId((current) => (current && friendOptions.some((user) => String(user._id || user.id) === current) ? current : nextFriendId));
       } else {
         setFriendTargetId('');
+      }
+
+      if (currentUserIsFriend && !isOwnProfile) {
+        setProfileInfo((current) => ({ ...current, username: userDisplayName }));
       }
     } catch (error) {
       console.error('Failed to load profile data:', error);
@@ -328,16 +348,21 @@ function ProfilePage() {
         />
       ) : (
         <div className="mb-8 rounded-r-lg border-l-4 border-[#d9a05b] bg-[#fffdf9] p-5 text-[#2b2118] shadow-[0_4px_20px_rgba(43,33,24,0.05)]">
+          <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Name:</strong> {profileInfo.username}</p>
           <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Quote:</strong> "{profileInfo.quote}"</p>
-          <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Age:</strong> {profileInfo.age}</p>
-          <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Country:</strong> {profileInfo.country}</p>
-          <p className="mb-0 text-[#6e6052]"><strong className="text-[#2b2118]">Hobbies:</strong> {profileInfo.hobbies}</p>
+          {canSeeFullProfile && (
+            <>
+              <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Age:</strong> {profileInfo.age}</p>
+              <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Country:</strong> {profileInfo.country}</p>
+              <p className="mb-0 text-[#6e6052]"><strong className="text-[#2b2118]">Hobbies:</strong> {profileInfo.hobbies}</p>
+            </>
+          )}
         </div>
       )}
 
-      <FriendList friends={friendsList} onRemoveFriend={handleRemoveFriend} isOwnProfile={isOwnProfile} />
+      {canSeeFullProfile && <FriendList friends={friendsList} onRemoveFriend={handleRemoveFriend} isOwnProfile={isOwnProfile} />}
 
-      {isOwnProfile && (
+      {canSeeFullProfile && isOwnProfile && (
         <form onSubmit={handleAddFriend} className="mb-8 rounded-lg border border-[#e6ded3] bg-[#fffdf9] p-6 shadow-[0_4px_20px_rgba(43,33,24,0.05)]">
           <h3 className="[font-family:var(--font-heading)] mb-4 text-2xl text-[#2b2118]">Add a friend</h3>
           <div className="flex flex-col gap-3 md:flex-row">
@@ -363,7 +388,7 @@ function ProfilePage() {
         </form>
       )}
 
-      {isOwnProfile && (
+      {canSeeFullProfile && isOwnProfile && (
         <div className="mb-8 rounded-lg border border-[#e6ded3] bg-[#fffdf9] p-6 shadow-[0_4px_20px_rgba(43,33,24,0.05)]">
           <h3 className="[font-family:var(--font-heading)] mb-4 text-2xl text-[#2b2118]">{editingAlbumId ? 'Edit Album' : 'Create Album'}</h3>
           <form onSubmit={handleAlbumSubmit} className="space-y-4">
@@ -403,7 +428,7 @@ function ProfilePage() {
         </div>
       )}
 
-      {isOwnProfile && (
+      {canSeeFullProfile && isOwnProfile && (
         <div className="mb-10">
           <h3 className="[font-family:var(--font-heading)] mb-4 text-2xl text-[#2b2118]">Albums</h3>
           <div className="grid gap-7 md:grid-cols-2 xl:grid-cols-3">
@@ -440,7 +465,7 @@ function ProfilePage() {
         </div>
       )}
 
-      {isOwnProfile && (
+      {canSeeFullProfile && isOwnProfile && (
         <>
           {editPost ? (
             <CreatePost

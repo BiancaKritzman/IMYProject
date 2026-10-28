@@ -8,6 +8,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const isAdminUser = (user = {}) => Boolean(user.isAdmin || String(user.name || '').trim().toLowerCase() === 'test');
+
 app.get('/api/social-data', async (req, res) => {
   try {
     const [users, posts, albums, friendships] = await Promise.all([
@@ -27,7 +29,10 @@ app.get('/api/social-data', async (req, res) => {
         id: String(post._id || post.id),
         userId: String(post.userId || owner?._id || post._id || post.id),
         name: authorName,
-        desc: post.caption || post.title || 'No description'
+        desc: post.caption || post.title || 'No description',
+        hidden: Boolean(post.hidden),
+        reportCount: Array.isArray(post.reports) ? post.reports.length : 0,
+        reports: Array.isArray(post.reports) ? post.reports : []
       };
     });
 
@@ -36,7 +41,12 @@ app.get('/api/social-data', async (req, res) => {
     res.status(200).json({
       currentUserId: null,
       users,
-      posts,
+      posts: posts.map((post) => ({
+        ...post,
+        hidden: Boolean(post.hidden),
+        reportCount: Array.isArray(post.reports) ? post.reports.length : 0,
+        reports: Array.isArray(post.reports) ? post.reports : []
+      })),
       albums,
       friendships,
       localAccounts: mappedAccounts.slice(0, midpoint),
@@ -64,7 +74,7 @@ app.post('/api/login', async (req, res) => {
     const adminUser = {
       ...user.toObject(),
       password: undefined,
-      isAdmin: true
+      isAdmin: isAdminUser(user.toObject())
     };
 
     return res.status(200).json({
@@ -88,18 +98,20 @@ app.post('/api/signup', async (req, res) => {
       return res.status(409).json({ message: 'User already exists' });
     }
 
+    const isAdminAccount = String(name).trim().toLowerCase() === 'test';
+
     const user = await User.create({
       name,
       email,
       password,
-      isAdmin: true,
+      isAdmin: isAdminAccount,
       bio: '',
       country: '',
       hobbies: [],
       profileImage: ''
     });
 
-    return res.status(201).json({ message: 'User registered successfully', user });
+    return res.status(201).json({ message: 'User registered successfully', user: { ...user.toObject(), isAdmin: isAdminUser(user.toObject()) } });
   } catch (error) {
     return res.status(500).json({ message: 'Signup failed', error: error.message });
   }
@@ -135,9 +147,19 @@ app.post('/api/users', async (req, res) => {
 
 app.put('/api/users/:id', async (req, res) => {
   try {
+    const currentUserId = req.body?.currentUserId;
+    const actor = currentUserId ? await User.findById(currentUserId) : null;
+    const targetUser = await User.findById(req.params.id);
+
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    if (currentUserId && String(targetUser._id) !== String(currentUserId) && !isAdminUser(actor)) {
+      return res.status(403).json({ message: 'You can only edit your own profile unless you are an admin.' });
+    }
+
     const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.status(200).json({ message: 'User updated successfully', user });
+    res.status(200).json({ message: 'User updated successfully', user: { ...user.toObject(), isAdmin: isAdminUser(user.toObject()) } });
   } catch (error) {
     res.status(500).json({ message: 'Failed to update user', error: error.message });
   }
@@ -145,6 +167,16 @@ app.put('/api/users/:id', async (req, res) => {
 
 app.delete('/api/users/:id', async (req, res) => {
   try {
+    const currentUserId = req.body?.currentUserId || req.query?.currentUserId;
+    const actor = currentUserId ? await User.findById(currentUserId) : null;
+    const targetUser = await User.findById(req.params.id);
+
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    if (currentUserId && String(targetUser._id) !== String(currentUserId) && !isAdminUser(actor)) {
+      return res.status(403).json({ message: 'You can only delete your own profile unless you are an admin.' });
+    }
+
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -171,11 +203,11 @@ app.post('/api/posts', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (!currentUser.isAdmin) {
+    if (!isAdminUser(currentUser) && String(currentUser._id) !== String(userId)) {
       return res.status(403).json({ message: 'Admin access required' });
     }
 
-    const post = await Post.create({ userId, title, imageUrl, caption });
+    const post = await Post.create({ userId, title, imageUrl, caption, hidden: false, reports: [] });
     res.status(201).json({ message: 'Post created successfully', post });
   } catch (error) {
     res.status(500).json({ message: 'Failed to create post', error: error.message });
@@ -194,9 +226,21 @@ app.get('/api/posts/:id', async (req, res) => {
 
 app.put('/api/posts/:id', async (req, res) => {
   try {
-    const post = await Post.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const currentUserId = req.body?.currentUserId;
+    const post = await Post.findById(req.params.id);
+
     if (!post) return res.status(404).json({ message: 'Post not found' });
-    res.status(200).json({ message: 'Post updated successfully', post });
+
+    if (currentUserId) {
+      const actingUser = await User.findById(currentUserId);
+      if (!actingUser) return res.status(404).json({ message: 'User not found' });
+      const canEdit = String(post.userId) === String(currentUserId) || isAdminUser(actingUser);
+      if (!canEdit) return res.status(403).json({ message: 'You do not have permission to edit this post.' });
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updatedPost) return res.status(404).json({ message: 'Post not found' });
+    res.status(200).json({ message: 'Post updated successfully', post: updatedPost });
   } catch (error) {
     res.status(500).json({ message: 'Failed to update post', error: error.message });
   }
@@ -204,13 +248,97 @@ app.put('/api/posts/:id', async (req, res) => {
 
 app.delete('/api/posts/:id', async (req, res) => {
   try {
-    const post = await Post.findByIdAndDelete(req.params.id);
+    const currentUserId = req.body?.currentUserId || req.query?.currentUserId;
+    const post = await Post.findById(req.params.id);
+
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
+    if (currentUserId) {
+      const actingUser = await User.findById(currentUserId);
+      if (!actingUser) return res.status(404).json({ message: 'User not found' });
+      const canDelete = String(post.userId) === String(currentUserId) || isAdminUser(actingUser);
+      if (!canDelete) return res.status(403).json({ message: 'You do not have permission to delete this post.' });
+    }
+
+    await Post.findByIdAndDelete(req.params.id);
     await Album.updateMany({}, { $pull: { postIds: req.params.id } });
     res.status(200).json({ message: 'Post deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete post', error: error.message });
+  }
+});
+
+app.post('/api/posts/:id/report', async (req, res) => {
+  try {
+    const { userId, reason } = req.body || {};
+    const reportReason = String(reason || '').trim();
+
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required to report a post.' });
+    }
+
+    if (!reportReason) {
+      return res.status(400).json({ message: 'A report reason is required.' });
+    }
+
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    const existingReport = (post.reports || []).find((report) => String(report.userId) === String(userId));
+
+    if (existingReport) {
+      existingReport.reason = reportReason;
+      existingReport.createdAt = new Date();
+      await post.save();
+
+      return res.status(200).json({
+        message: 'Your report was updated.',
+        hidden: Boolean(post.hidden),
+        reportCount: post.reports.length,
+        post
+      });
+    }
+
+    post.reports = [...(post.reports || []), { userId, reason: reportReason, createdAt: new Date() }];
+    if (post.reports.length >= 2) {
+      post.hidden = true;
+    }
+
+    await post.save();
+
+    return res.status(200).json({
+      message: post.hidden ? 'This post was reported twice and is now hidden.' : 'Post reported successfully.',
+      hidden: Boolean(post.hidden),
+      reportCount: post.reports.length,
+      post
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to report post', error: error.message });
+  }
+});
+
+app.put('/api/posts/:id/hide', async (req, res) => {
+  try {
+    const { hidden } = req.body || {};
+    const post = await Post.findById(req.params.id);
+
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    post.hidden = Boolean(hidden);
+    await post.save();
+
+    return res.status(200).json({ message: post.hidden ? 'Post hidden.' : 'Post unhidden.', hidden: post.hidden, post });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to update hidden status', error: error.message });
+  }
+});
+
+app.get('/api/reported-posts', async (req, res) => {
+  try {
+    const posts = await Post.find({ reports: { $exists: true, $ne: [] } }).lean();
+    return res.status(200).json({ posts });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to fetch reported posts', error: error.message });
   }
 });
 
@@ -244,9 +372,21 @@ app.post('/api/albums', async (req, res) => {
 
 app.put('/api/albums/:id', async (req, res) => {
   try {
-    const album = await Album.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const currentUserId = req.body?.currentUserId;
+    const album = await Album.findById(req.params.id);
+
     if (!album) return res.status(404).json({ message: 'Album not found' });
-    res.status(200).json({ message: 'Album updated successfully', album });
+
+    if (currentUserId) {
+      const actingUser = await User.findById(currentUserId);
+      if (!actingUser) return res.status(404).json({ message: 'User not found' });
+      const canEdit = String(album.userId) === String(currentUserId) || isAdminUser(actingUser);
+      if (!canEdit) return res.status(403).json({ message: 'You do not have permission to edit this album.' });
+    }
+
+    const updatedAlbum = await Album.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updatedAlbum) return res.status(404).json({ message: 'Album not found' });
+    res.status(200).json({ message: 'Album updated successfully', album: updatedAlbum });
   } catch (error) {
     res.status(500).json({ message: 'Failed to update album', error: error.message });
   }
@@ -254,8 +394,19 @@ app.put('/api/albums/:id', async (req, res) => {
 
 app.delete('/api/albums/:id', async (req, res) => {
   try {
-    const album = await Album.findByIdAndDelete(req.params.id);
+    const currentUserId = req.body?.currentUserId || req.query?.currentUserId;
+    const album = await Album.findById(req.params.id);
+
     if (!album) return res.status(404).json({ message: 'Album not found' });
+
+    if (currentUserId) {
+      const actingUser = await User.findById(currentUserId);
+      if (!actingUser) return res.status(404).json({ message: 'User not found' });
+      const canDelete = String(album.userId) === String(currentUserId) || isAdminUser(actingUser);
+      if (!canDelete) return res.status(403).json({ message: 'You do not have permission to delete this album.' });
+    }
+
+    await Album.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: 'Album deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete album', error: error.message });

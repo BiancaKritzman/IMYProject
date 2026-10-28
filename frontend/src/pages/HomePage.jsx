@@ -46,6 +46,8 @@ function HomePage() {
 
   const filteredLocal = localAccounts.filter(matchesSearch);
   const filteredGlobal = globalAccounts.filter(matchesSearch);
+  //filter Album to show albums stored in the album collection in the mongodb
+  const filterAlbum = (localAccounts.concat(globalAccounts)).filter((acc) => acc.desc.toLowerCase().includes('album'));
 
   return (
     <main className="mx-auto max-w-[1100px] px-6 py-10">
@@ -82,6 +84,24 @@ function HomePage() {
           ))}
         </div>
       </section>
+
+      <section className="mb-12">
+        <h2 className="[font-family:var(--font-heading)] mb-4 text-3xl text-[#2b2118]">Album</h2>
+        <div className="grid gap-7 md:grid-cols-2 xl:grid-cols-3">
+          {filterAlbum.map((acc) => (
+            <PostPreview
+              key={acc.userId || acc.id}
+              id={acc.id}
+              profileId={acc.userId || acc.id}
+              postId={acc.id}
+              accountName={acc.name}
+              imageUrl={acc.imageUrl}
+              description={acc.desc}
+            />
+          ))}
+        </div>
+      </section>
+
     </main>
   );
 }

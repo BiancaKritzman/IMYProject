@@ -21,6 +21,31 @@ function PostPage() {
 
   const [post, setPost] = useState(null);
   const [album, setAlbum] = useState(fallbackAlbum);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+
+  const normalizeComments = (commentList) => {
+    if (!Array.isArray(commentList)) {
+      return [];
+    }
+
+    return commentList
+      .map((comment, index) => {
+        const commentText = typeof comment === 'string' ? comment : comment?.text || comment?.comment || comment?.message || '';
+        const author = typeof comment === 'string' ? 'Friend' : comment?.author || comment?.name || 'Friend';
+
+        if (!commentText.trim()) {
+          return null;
+        }
+
+        return {
+          id: comment?._id || comment?.id || `${author}-${commentText}-${index}`,
+          author,
+          text: commentText
+        };
+      })
+      .filter(Boolean);
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -29,32 +54,85 @@ function PostPage() {
         if (!res.ok) throw new Error('Failed to load post data');
 
         const result = await res.json();
-        const foundPost = (result.posts || []).find((item) => String(item._id || item.id) === String(id));
-        const foundAlbum = (result.albums || []).find((item) => (item.postIds || []).includes(String(id))) || fallbackAlbum;
+        const posts = result.posts || [];
+        const albums = result.albums || [];
 
-        const normalizedPost = foundPost
-          ? {
-              ...foundPost,
-              id: foundPost._id || foundPost.id || id,
-              userId: foundPost.userId || foundPost.account_id || '1',
-              title: foundPost.title || foundPost.name || foundPost.account_name || fallbackPost.title,
-              caption: foundPost.caption || foundPost.description || fallbackPost.caption,
-              description: foundPost.description || foundPost.caption || fallbackPost.description,
-              imageUrl: foundPost.imageUrl || foundPost.image || fallbackPost.imageUrl,
-              account_name: foundPost.account_name || foundPost.name || fallbackPost.account_name
-            }
-          : fallbackPost;
+        // Find post matching id flexibly
+        const foundPost = posts.find((item) => {
+          const itemId = String(item._id || item.id || '');
+          return itemId === String(id);
+        });
 
-        setPost(normalizedPost);
-        setAlbum(foundAlbum);
+        // Find album where postIds includes this post's ID or stringified ID
+        const foundAlbum = albums.find((item) => {
+          const postIds = item.postIds || item.posts || [];
+          return postIds.map(String).includes(String(id));
+        }) || {
+          name: 'General Gallery',
+          description: 'A collection of shared moments.',
+          userId: foundPost?.userId || '1',
+          postIds: [id]
+        };
+
+        if (foundPost) {
+          const normalizedPost = {
+            id: foundPost._id || foundPost.id || id,
+            userId: foundPost.userId || foundPost.account_id || '1',
+            title: foundPost.title || foundPost.name || foundPost.account_name || 'Untitled Post',
+            caption: foundPost.caption || foundPost.description || '',
+            description: foundPost.description || foundPost.caption || '',
+            // Check all common image property variants returned by backends
+            imageUrl: foundPost.imageUrl || foundPost.image || foundPost.photoUrl || foundPost.url || '',
+            account_name: foundPost.account_name || foundPost.name || 'User',
+            comments: normalizeComments(foundPost.comments || foundPost.commentList || [])
+          };
+          setPost(normalizedPost);
+          setAlbum(foundAlbum);
+          setComments(normalizedPost.comments);
+        } else {
+          // If post isn't found in API, check if it's stored locally (e.g., newly created posts)
+          const localPosts = JSON.parse(localStorage.getItem('createdPosts') || '[]');
+          const localPost = localPosts.find(p => String(p.id || p._id) === String(id));
+          
+          if (localPost) {
+            setPost(localPost);
+            setAlbum(foundAlbum);
+          } else {
+            // Ultimate fallback if completely missing
+            setPost({
+              id,
+              title: 'Post Not Found',
+              caption: 'This post could not be retrieved.',
+              imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80'
+            });
+          }
+        }
       } catch (error) {
         console.error('Failed to load post data:', error);
-        setPost(fallbackPost);
       }
     };
 
     loadData();
   }, [id]);
+
+  const handleAddComment = (event) => {
+    event.preventDefault();
+    const trimmedComment = newComment.trim();
+
+    if (!trimmedComment) {
+      return;
+    }
+
+    setComments((previousComments) => [
+      ...previousComments,
+      {
+        id: Date.now(),
+        author: 'You',
+        text: trimmedComment
+      }
+    ]);
+    setNewComment('');
+  };
 
   if (!post) {
     return <main className="mx-auto max-w-[1100px] px-6 py-10">Loading post...</main>;
@@ -95,11 +173,34 @@ function PostPage() {
 
       <section className="mt-8 rounded-lg border border-[#e6ded3] bg-[#fffdf9] p-6 shadow-[0_4px_20px_rgba(43,33,24,0.05)]">
         <h3 className="[font-family:var(--font-heading)] mb-3 text-2xl text-[#2b2118]">Comments</h3>
-        <ul className="list-disc space-y-2 pl-5 text-[#2b2118]">
-          <li><strong>Friend 1:</strong> Stunning shot!</li>
-          <li><strong>Friend 2:</strong> Where was this taken?</li>
-          <li><strong>Bianca:</strong> Love it here!</li>
-        </ul>
+
+        {comments.length === 0 ? (
+          <p className="mb-4 text-[#6e6052]">No comments yet. Be the first to share your thoughts.</p>
+        ) : (
+          <ul className="mb-5 list-disc space-y-2 pl-5 text-[#2b2118]">
+            {comments.map((comment) => (
+              <li key={comment.id}>
+                <strong>{comment.author}:</strong> {comment.text}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form onSubmit={handleAddComment} className="space-y-3">
+          <textarea
+            value={newComment}
+            onChange={(event) => setNewComment(event.target.value)}
+            rows={3}
+            placeholder="Write a comment..."
+            className="w-full rounded-md border border-[#d9cab9] bg-white p-3 text-[#2b2118] outline-none transition focus:border-[#8a715a]"
+          />
+          <button
+            type="submit"
+            className="rounded-md bg-[#8a715a] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#755d49]"
+          >
+            Add comment
+          </button>
+        </form>
       </section>
     </main>
   );

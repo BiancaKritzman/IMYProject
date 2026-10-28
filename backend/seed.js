@@ -16,6 +16,16 @@ const seedData = async () => {
 
   const users = await User.insertMany([
     {
+      name: 'test',
+      email: 'test@example.com',
+      password: 'password123',
+      isAdmin: true,
+      bio: 'Admin account for moderation',
+      country: 'South Africa',
+      hobbies: ['Administration', 'Moderation'],
+      profileImage: 'https://example.com/test.jpg'
+    },
+    {
       name: 'Ava Smith',
       email: 'ava@example.com',
       password: 'password123',

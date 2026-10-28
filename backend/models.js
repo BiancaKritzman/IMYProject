@@ -19,6 +19,12 @@ const postSchema = new mongoose.Schema({
   title: { type: String, required: true },
   imageUrl: { type: String, required: true },
   caption: String,
+  hidden: { type: Boolean, default: false },
+  reports: [{
+    userId: { type: String, required: true },
+    reason: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now }
+  }],
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
