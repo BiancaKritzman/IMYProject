@@ -39,6 +39,10 @@ function ProfilePage() {
 
   const loadData = async () => {
     try {
+      const storedUser = localStorage.getItem('currentUser');
+      const currentSessionUser = storedUser ? JSON.parse(storedUser) : null;
+      const signedInUserId = currentSessionUser?._id || currentSessionUser?.id || null;
+
       const res = await fetch('/api/social-data');
       if (!res.ok) throw new Error('Failed to fetch profile data');
 
@@ -48,29 +52,15 @@ function ProfilePage() {
       const friendships = result.friendships || [];
       const userAlbums = (result.albums || []).filter((album) => String(album.userId) === String(resolvedId));
 
-      const matchedUser = users.find((user) => String(user._id || user.id) === String(resolvedId)) || users[0] || {};
+      const matchedUser = users.find((user) => String(user._id || user.id) === String(resolvedId)) || {};
       const userDisplayName = matchedUser.name || matchedUser.email?.split('@')[0] || `User ${String(resolvedId).slice(-4) || 'profile'}`;
       const userQuote = matchedUser.quote ?? matchedUser.bio ?? 'No quote available';
       const userAge = matchedUser.age ?? 'Not specified';
       const userCountry = matchedUser.country || 'Not specified';
       const userHobbies = Array.isArray(matchedUser.hobbies) ? matchedUser.hobbies : [];
-      const allowedPostIds = Array.isArray(matchedUser.postIds)
-        ? matchedUser.postIds.map((postId) => String(postId))
-        : [];
-      const profileUserKeys = new Set([
-        String(resolvedId),
-        String(result.currentUserId || currentUserId),
-        String(matchedUser._id || matchedUser.id)
-      ].filter(Boolean));
 
       const matchedPosts = posts
-        .filter((post) => {
-          const postId = String(post._id || post.id);
-          const postUserId = String(post.userId || post.user_id);
-          return allowedPostIds.length > 0
-            ? allowedPostIds.includes(postId) || profileUserKeys.has(postUserId)
-            : profileUserKeys.has(postUserId);
-        })
+        .filter((post) => String(post.userId || post.user_id) === String(resolvedId))
         .map((post) => ({
           id: String(post._id || post.id),
           title: post.title || '',
@@ -95,12 +85,14 @@ function ProfilePage() {
         })
         .filter(Boolean);
 
-      const friendOptions = users.filter((user) => {
-        const userKey = String(user._id || user.id);
-        return userKey !== String(result.currentUserId || currentUserId) && !matchedFriends.some((friend) => String(friend.id) === userKey);
-      });
+      const friendOptions = signedInUserId
+        ? users.filter((user) => {
+            const userKey = String(user._id || user.id);
+            return userKey !== String(signedInUserId) && !matchedFriends.some((friend) => String(friend.id) === userKey);
+          })
+        : [];
 
-      setCurrentUserId(result.currentUserId || null);
+      setCurrentUserId(signedInUserId || null);
       setAllUsers(users);
       setProfileInfo({
         username: userDisplayName,
@@ -113,7 +105,7 @@ function ProfilePage() {
       setUserPosts(matchedPosts.length ? matchedPosts : []);
       setAlbums(userAlbums);
 
-      if (result.currentUserId && String(result.currentUserId) === String(resolvedId) && friendOptions.length > 0) {
+      if (signedInUserId && friendOptions.length > 0) {
         const firstAvailableUser = friendOptions[0];
         const nextFriendId = String(firstAvailableUser._id || firstAvailableUser.id);
         setFriendTargetId((current) => (current && friendOptions.some((user) => String(user._id || user.id) === current) ? current : nextFriendId));

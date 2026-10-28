@@ -34,7 +34,7 @@ app.get('/api/social-data', async (req, res) => {
     const midpoint = Math.ceil(mappedAccounts.length / 2);
 
     res.status(200).json({
-      currentUserId: users[0]?._id?.toString() || null,
+      currentUserId: null,
       users,
       posts,
       albums,
@@ -61,12 +61,15 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid password' });
     }
 
+    const adminUser = {
+      ...user.toObject(),
+      password: undefined,
+      isAdmin: true
+    };
+
     return res.status(200).json({
       message: 'Login successful',
-      user: {
-        ...user.toObject(),
-        password: undefined
-      }
+      user: adminUser
     });
   } catch (error) {
     return res.status(500).json({ message: 'Login failed', error: error.message });
@@ -89,6 +92,7 @@ app.post('/api/signup', async (req, res) => {
       name,
       email,
       password,
+      isAdmin: true,
       bio: '',
       country: '',
       hobbies: [],
@@ -158,13 +162,16 @@ app.post('/api/posts', async (req, res) => {
   try {
     const { userId, title, imageUrl, caption } = req.body;
 
-    const currentUser = await User.findById(userId);
-
     if (!userId) {
       return res.status(400).json({ message: 'User ID is required' });
     }
 
-    if (!currentUser?.isAdmin) {
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!currentUser.isAdmin) {
       return res.status(403).json({ message: 'Admin access required' });
     }
 

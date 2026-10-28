@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import SearchInput from '../components/SearchInput';
 import PostPreview from '../components/PostPreview';
-import ProfilePreview from '../components/ProfilePreview';
 
 function HomePage() {
   const [search, setSearch] = useState('');
@@ -12,24 +11,26 @@ function HomePage() {
     const loadData = async () => {
       try {
         const res = await fetch('/api/social-data');
-        const data = await res.json();
-
-        setPosts(data.posts || []);
-        setUsers(data.users || []);
-
-        const postCards = posts.map(post => {
-          const author = users.find(user => String(user._id) === String(post.userId));
-          return {
-            ...post,
-            authorName: author?.name || 'Unknown user'
-          };
-        });
-
         if (!res.ok) throw new Error('Failed to load social data');
 
         const result = await res.json();
-        setLocalAccounts(result.localAccounts || []);
-        setGlobalAccounts(result.globalAccounts || []);
+        const users = result.users || [];
+
+        const mappedAccounts = (result.posts || []).map((post) => {
+          const owner = users.find((user) => String(user._id || user.id) === String(post.userId || post.user_id));
+          return {
+            id: String(post._id || post.id),
+            userId: String(post.userId || post.user_id || owner?._id || owner?.id || ''),
+            name: owner?.name || owner?.email?.split('@')[0] || 'Unknown user',
+            desc: post.caption || post.title || 'No description'
+          };
+        });
+
+        const shuffledAccounts = [...mappedAccounts].sort(() => Math.random() - 0.5);
+        const midpoint = Math.ceil(shuffledAccounts.length / 2);
+
+        setLocalAccounts(shuffledAccounts.slice(0, midpoint));
+        setGlobalAccounts(shuffledAccounts.slice(midpoint));
       } catch (error) {
         console.error('Failed to load data:', error);
       }

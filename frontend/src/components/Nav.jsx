@@ -8,33 +8,21 @@ function Nav() {
   useEffect(() => {
     const resolveProfileTarget = async () => {
       try {
+        const storedUser = localStorage.getItem('currentUser');
+        const currentUser = storedUser ? JSON.parse(storedUser) : null;
+        const signedInUserId = currentUser?._id || currentUser?.id;
+
+        if (signedInUserId) {
+          setProfileTarget(`/profile/${signedInUserId}`);
+          return;
+        }
+
         const response = await fetch('/api/social-data');
         if (!response.ok) throw new Error('Failed to load profile target');
 
         const result = await response.json();
         const users = result.users || [];
         const firstUserId = users[0]?._id || users[0]?.id;
-
-        if (location.pathname.startsWith('/profile/')) {
-          const currentProfileId = location.pathname.split('/profile/')[1];
-          setProfileTarget(currentProfileId ? `/profile/${currentProfileId}` : '/profile/1');
-          return;
-        }
-
-        if (location.pathname === '/home') {
-          setProfileTarget(firstUserId ? `/profile/${firstUserId}` : '/profile/1');
-          return;
-        }
-
-        const postMatch = location.pathname.match(/^\/post\/(.+)$/);
-        if (postMatch) {
-          const postId = postMatch[1];
-          const selectedPost = (result.posts || []).find((post) => String(post._id || post.id) === String(postId));
-          const ownerId = selectedPost?.userId || selectedPost?.user_id || firstUserId;
-          setProfileTarget(ownerId ? `/profile/${ownerId}` : '/profile/1');
-          return;
-        }
-
         setProfileTarget(firstUserId ? `/profile/${firstUserId}` : '/profile/1');
       } catch (error) {
         console.error('Failed to resolve profile target:', error);

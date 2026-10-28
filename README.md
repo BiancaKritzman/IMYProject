@@ -1,6 +1,6 @@
 # IMY220_D1
 
-https://github.com/BiancaKritzman/IMY220_D1.git
+https://github.com/BiancaKritzman/IMYProject.git
 
 # Commands to build and run Docker
 

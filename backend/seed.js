@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 const { User, Post, Album, Friendship } = require('./models');
 
@@ -18,6 +19,7 @@ const seedData = async () => {
       name: 'Ava Smith',
       email: 'ava@example.com',
       password: 'password123',
+      isAdmin: true,
       bio: 'Nature photographer',
       country: 'South Africa',
       hobbies: ['Photography', 'Hiking'],

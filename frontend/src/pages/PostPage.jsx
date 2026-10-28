@@ -16,7 +16,7 @@ function PostPage() {
     caption: 'Captured during a quiet morning hike.',
     description: 'Love it here!',
     imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
-    account_name: 'jane_doe'
+    account_name: 'Bianca'
   };
 
   const [post, setPost] = useState(null);
@@ -98,7 +98,7 @@ function PostPage() {
         <ul className="list-disc space-y-2 pl-5 text-[#2b2118]">
           <li><strong>Friend 1:</strong> Stunning shot!</li>
           <li><strong>Friend 2:</strong> Where was this taken?</li>
-          <li><strong>jane_doe:</strong> Love it here!</li>
+          <li><strong>Bianca:</strong> Love it here!</li>
         </ul>
       </section>
     </main>
