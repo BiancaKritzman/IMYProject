@@ -2,7 +2,14 @@
 
 https://github.com/BiancaKritzman/IMYProject.git
 
-# Commands to build and run Docker
+# Commands to build and run Docker Compose
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+
+# Stop and remove containers
+docker compose down
 
 # Build images
 docker build -t frontend-app ./frontend
