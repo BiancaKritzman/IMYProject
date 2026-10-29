@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import SearchInput from '../components/SearchInput';
 import PostPreview from '../components/PostPreview';
+import AlbumPreview from '../components/AlbumPreview';
 
 function HomePage() {
   const [search, setSearch] = useState('');
@@ -10,11 +11,40 @@ function HomePage() {
   const [albums, setAlbums] = useState([]);
   const [selectedAlbum, setSelectedAlbum] = useState(null);
 
-  // Modal State for Reporting
+  // Modal State for Reporting & Viewing Reasons
   const [reportingPostId, setReportingPostId] = useState(null);
+  const [viewingReasonsPost, setViewingReasonsPost] = useState(null);
   const [selectedReason, setSelectedReason] = useState('Inappropriate');
+  const [reportReasons, setReportReasons] = useState(['Inappropriate', 'Violent', 'AI', 'Other']);
+  const [newReasonInput, setNewReasonInput] = useState('');
+  const [isAddingReason, setIsAddingReason] = useState(false);
 
-  const reportReasons = ['Inappropriate', 'Violent', 'AI', 'Other'];
+  // Strict check: Admin button is ONLY for user named "test"
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAdmin = String(currentUser.name || '').trim().toLowerCase() === 'test';
+
+  const handleDeletePost = (postId) => {
+    setPosts((currentPosts) => {
+      const updated = currentPosts.filter((p) => p.id !== postId);
+      updateLocalStorageReports(updated);
+      return updated;
+    });
+  };
+
+  const handleDeleteAlbum = (albumId) => {
+    setAlbums((currentAlbums) => currentAlbums.filter((a) => a.id !== albumId));
+    if (selectedAlbum?.id === albumId) setSelectedAlbum(null);
+  };
+
+  const handleAddReportingReason = (e) => {
+    e.preventDefault();
+    const trimmed = newReasonInput.trim();
+    if (trimmed && !reportReasons.includes(trimmed)) {
+      setReportReasons((prev) => [...prev, trimmed]);
+      setNewReasonInput('');
+      setIsAddingReason(false);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -59,6 +89,7 @@ function HomePage() {
               id: postId,
               userId: String(owner._id || owner.id),
               name: owner.name || owner.email?.split('@')[0] || 'User',
+              email: owner.email || '',
               desc: post.caption || post.description || post.title || 'No description',
               imageUrl: post.imageUrl || post.image || post.photoUrl || '',
               scope,
@@ -85,6 +116,7 @@ function HomePage() {
               name: album.name || 'Untitled Album',
               description: album.description || 'No description',
               ownerName: owner.name || owner.email?.split('@')[0] || 'User',
+              email: owner.email || '',
               postIds: (album.postIds || []).map(String)
             };
           })
@@ -99,7 +131,6 @@ function HomePage() {
     loadData();
   }, []);
 
-  // Persist report data to localStorage
   const updateLocalStorageReports = (updatedPosts) => {
     const reportsMap = {};
     updatedPosts.forEach((p) => {
@@ -112,13 +143,11 @@ function HomePage() {
     localStorage.setItem('post_reports_tally', JSON.stringify(reportsMap));
   };
 
-  // Open modal for specific post
   const handleOpenReportModal = (postId) => {
     setReportingPostId(postId);
-    setSelectedReason('Inappropriate');
+    setSelectedReason(reportReasons[0] || 'Inappropriate');
   };
 
-  // Submit report reason
   const handleConfirmReport = () => {
     if (!reportingPostId) return;
 
@@ -160,8 +189,18 @@ function HomePage() {
   };
 
   const matchesSearch = (item) => {
-    const text = `${item.name || item.ownerName || ''} ${item.desc || item.description || ''}`.toLowerCase();
-    return text.includes(search.toLowerCase());
+    const query = search.toLowerCase().trim();
+    if (!query) return true;
+
+    const ownerName = String(item.name || item.ownerName || '').toLowerCase();
+    const ownerEmail = String(item.email || item.ownerEmail || '').toLowerCase();
+    const description = String(item.desc || item.description || '').toLowerCase();
+
+    return (
+      ownerName.includes(query) ||
+      ownerEmail.includes(query) ||
+      description.includes(query)
+    );
   };
 
   const visiblePosts = posts.filter((post) => {
@@ -223,18 +262,47 @@ function HomePage() {
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowHidden(!showHidden)}
-          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-            showHidden
-              ? 'bg-[#8a715a] text-white'
-              : 'border border-[#e6ded3] bg-[#fffdf9] text-[#6e6052] hover:bg-[#f4efe6]'
-          }`}
-        >
-          {showHidden ? 'Hide Hidden Posts' : 'Show Hidden Posts'}
-        </button>
+        <div className="flex gap-2">
+          {/* Admin ("test") Only Button */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsAddingReason(!isAddingReason)}
+              className="rounded-md bg-[#4a382a] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#31241a]"
+            >
+              {isAddingReason ? 'Cancel Add Reason' : '+ Add Reporting Reason'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowHidden(!showHidden)}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              showHidden
+                ? 'bg-[#8a715a] text-white'
+                : 'border border-[#e6ded3] bg-[#fffdf9] text-[#6e6052] hover:bg-[#f4efe6]'
+            }`}
+          >
+            {showHidden ? 'Hide Hidden Posts' : 'Show Hidden Posts'}
+          </button>
+        </div>
       </div>
+
+      {isAdmin && isAddingReason && (
+        <form onSubmit={handleAddReportingReason} className="mb-6 flex gap-3 rounded-lg border border-[#e6ded3] bg-[#fffdf9] p-4 shadow-sm">
+          <input
+            type="text"
+            value={newReasonInput}
+            onChange={(e) => setNewReasonInput(e.target.value)}
+            placeholder="Enter new report reason (e.g. Spam, Copyright)..."
+            className="flex-1 rounded-md border border-[#e6ded3] bg-[#f4efe6] px-3 py-2 text-sm text-[#2b2118] outline-none"
+            required
+          />
+          <button type="submit" className="rounded-md bg-[#4a382a] px-4 py-2 text-sm text-white">
+            Add
+          </button>
+        </form>
+      )}
 
       {/* Local Posts */}
       {(activeTab === 'all' || activeTab === 'local') && (
@@ -255,8 +323,12 @@ function HomePage() {
                   description={post.desc}
                   isHidden={post.isHidden}
                   reportCount={post.reportCount}
+                  reasons={post.reasons}
                   onOpenReportModal={handleOpenReportModal}
                   onToggleHide={handleToggleHidePost}
+                  isAdmin={isAdmin}
+                  onDeletePost={handleDeletePost}
+                  onViewReasons={() => setViewingReasonsPost(post)}
                 />
               ))}
             </div>
@@ -283,8 +355,12 @@ function HomePage() {
                   description={post.desc}
                   isHidden={post.isHidden}
                   reportCount={post.reportCount}
+                  reasons={post.reasons}
                   onOpenReportModal={handleOpenReportModal}
                   onToggleHide={handleToggleHidePost}
+                  isAdmin={isAdmin}
+                  onDeletePost={handleDeletePost}
+                  onViewReasons={() => setViewingReasonsPost(post)}
                 />
               ))}
             </div>
@@ -307,32 +383,16 @@ function HomePage() {
           )}
         </div>
 
-        {selectedAlbum && (
-          <div className="mb-6 rounded-lg border border-[#d9a05b] bg-[#fff7ed] p-4 text-[#2b2118]">
-            <p className="font-semibold">Showing posts for album: "{selectedAlbum.name}"</p>
-            <p className="text-xs text-[#6e6052]">By {selectedAlbum.ownerName}</p>
-          </div>
-        )}
-
         <div className="mb-8 grid gap-7 md:grid-cols-2 xl:grid-cols-3">
           {filteredAlbums.map((album) => (
-            <article
+            <AlbumPreview
               key={album.id}
-              onClick={() => setSelectedAlbum(album)}
-              className={`cursor-pointer rounded-lg border p-6 transition duration-200 hover:-translate-y-1 hover:shadow-[0_4px_20px_rgba(43,33,24,0.05)] ${
-                selectedAlbum?.id === album.id
-                  ? 'border-[#d9a05b] bg-[#fff7ed]'
-                  : 'border-[#e6ded3] bg-[#fffdf9]'
-              }`}
-            >
-              <p className="mb-1 text-xs uppercase tracking-widest text-[#8a715a]">
-                By {album.ownerName}
-              </p>
-              <h3 className="[font-family:var(--font-heading)] mb-2 text-xl text-[#2b2118]">
-                {album.name}
-              </h3>
-              <p className="text-[0.92rem] text-[#6e6052]">{album.description}</p>
-            </article>
+              album={album}
+              isSelected={selectedAlbum?.id === album.id}
+              onSelect={setSelectedAlbum}
+              isAdmin={isAdmin}
+              onDeleteAlbum={handleDeleteAlbum}
+            />
           ))}
         </div>
 
@@ -356,8 +416,12 @@ function HomePage() {
                     description={post.desc}
                     isHidden={post.isHidden}
                     reportCount={post.reportCount}
+                    reasons={post.reasons}
                     onOpenReportModal={handleOpenReportModal}
                     onToggleHide={handleToggleHidePost}
+                    isAdmin={isAdmin}
+                    onDeletePost={handleDeletePost}
+                    onViewReasons={() => setViewingReasonsPost(post)}
                   />
                 ))}
               </div>
@@ -414,6 +478,38 @@ function HomePage() {
                 className="rounded-md bg-[#b91c1c] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#991b1b]"
               >
                 Submit Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW REPORT REASONS MODAL (Admin Only) */}
+      {viewingReasonsPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-lg border border-[#e6ded3] bg-[#fffdf9] p-6 shadow-xl">
+            <h3 className="[font-family:var(--font-heading)] mb-2 text-2xl text-[#2b2118]">
+              Report Reasons for Post
+            </h3>
+            <p className="mb-4 text-xs text-[#6e6052]">Post ID: {viewingReasonsPost.id}</p>
+
+            {(!viewingReasonsPost.reasons || viewingReasonsPost.reasons.length === 0) ? (
+              <p className="mb-6 text-sm italic text-[#6e6052]">No reasons logged for this post yet.</p>
+            ) : (
+              <ul className="mb-6 list-disc space-y-1 pl-5 text-sm text-[#2b2118]">
+                {viewingReasonsPost.reasons.map((r, index) => (
+                  <li key={`reason-${index}`}>{r}</li>
+                ))}
+              </ul>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingReasonsPost(null)}
+                className="rounded-md bg-[#4a382a] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#31241a]"
+              >
+                Close
               </button>
             </div>
           </div>

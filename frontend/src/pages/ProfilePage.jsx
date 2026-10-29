@@ -34,6 +34,17 @@ function ProfilePage() {
 
  const isAdmin = String(currentUserName || '').trim().toLowerCase() === 'test' || Boolean((localStorage.getItem('currentUser') && JSON.parse(localStorage.getItem('currentUser'))?.isAdmin));
  const isOwnProfile = currentUserId ? String(currentUserId) === String(resolvedId) : false;
+ const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+ const handleDeleteUserAccount = async () => {
+    if (!window.confirm(`Are you sure you want to delete user ${profileInfo.username}?`)) return;
+    try {
+      const response = await fetch(`/api/users/${resolvedId}`, { method: 'DELETE' });
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+    }
+  };
 
   const isFriendWithProfile = currentUserId && !isOwnProfile
     ? friendsList.some((friend) => 
@@ -373,8 +384,28 @@ function ProfilePage() {
         )}
       </div>
 
+      {/* Admin Controls for Other Users */}
+          {isAdmin && !isOwnProfile && (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsEditing(!isEditing)}
+                className="rounded-md bg-[#4a382a] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#31241a]"
+              >
+                {isEditing ? 'Cancel Admin Edit' : 'Edit User Account'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteUserAccount}
+                className="rounded-md bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700"
+              >
+                Delete User
+              </button>
+            </>
+          )}
+
       {/* Profile Card Section */}
-      {isOwnProfile && isEditing ? (
+      {(isOwnProfile || isAdmin) && isEditing ? (
         <EditProfile
           currentProfile={profileInfo}
           onSave={handleSaveProfile}
@@ -402,10 +433,10 @@ function ProfilePage() {
             </div>
           </div>
 
-          {/* RESTRICTED DETAILS: Quote, Age, Country, Hobbies (Friends / Own Profile Only) */}
+          {/* RESTRICTED DETAILS: Quote, Age, Country, Hobbies */}
           {canSeeFullProfile && (
             <div className="mt-4 border-t border-[#e6ded3] pt-4">
-              <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Quote:</strong> "{profileInfo.quote}"</p>
+              <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Quote/Bio:</strong> "{profileInfo.quote}"</p>
               <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Age:</strong> {profileInfo.age}</p>
               <p className="mb-2 text-[#6e6052]"><strong className="text-[#2b2118]">Country:</strong> {profileInfo.country}</p>
               <p className="mb-0 text-[#6e6052]"><strong className="text-[#2b2118]">Hobbies:</strong> {profileInfo.hobbies}</p>
@@ -418,10 +449,15 @@ function ProfilePage() {
       {canSeeFullProfile && (
         <>
           {/* Friend List */}
-          <FriendList friends={friendsList} onRemoveFriend={handleRemoveFriend} isOwnProfile={isOwnProfile} />
+          <FriendList
+            friends={friendsList}
+            onRemoveFriend={handleRemoveFriend}
+            isOwnProfile={isOwnProfile}
+            isAdmin={isAdmin}
+          />
 
           {/* Add a Friend Form (Only on your own profile) */}
-          {isOwnProfile && (
+          {(isOwnProfile || isAdmin) && (
             <form onSubmit={handleAddFriend} className="mb-8 rounded-lg border border-[#e6ded3] bg-[#fffdf9] p-6 shadow-[0_4px_20px_rgba(43,33,24,0.05)]">
               <h3 className="[font-family:var(--font-heading)] mb-4 text-2xl text-[#2b2118]">Add a friend</h3>
               <div className="flex flex-col gap-3 md:flex-row">
@@ -448,7 +484,7 @@ function ProfilePage() {
           )}
 
           {/* Create/Edit Album Form (Only on your own profile) */}
-          {isOwnProfile && (
+          {(isOwnProfile || isAdmin) && (
             <div className="mb-8 rounded-lg border border-[#e6ded3] bg-[#fffdf9] p-6 shadow-[0_4px_20px_rgba(43,33,24,0.05)]">
               <h3 className="[font-family:var(--font-heading)] mb-4 text-2xl text-[#2b2118]">
                 {editingAlbumId ? 'Edit Album' : 'Create Album'}
@@ -533,7 +569,7 @@ function ProfilePage() {
           </div>
 
           {/* Create / Edit Post Form (Only on your own profile) */}
-          {isOwnProfile && (
+          {(isOwnProfile || isAdmin) && (
             <div className="mb-8">
               {editPost ? (
                 <CreatePost
@@ -567,10 +603,12 @@ function ProfilePage() {
                     accountName={profileInfo.username}
                     imageUrl={post.imageUrl}
                     description={post.description || post.caption}
+                    isAdmin={isAdmin}
+                    onDeletePost={handleDeletePost}
                   />
 
                   {/* Owner Controls (Edit/Delete) */}
-                  {isOwnProfile && (
+                  {(isOwnProfile || isAdmin) && (
                     <div className="mt-2 flex gap-2">
                       <button
                         type="button"
