@@ -33,11 +33,16 @@ function ProfilePage() {
   const [friendTargetId, setFriendTargetId] = useState('');
 
  const isAdmin = String(currentUserName || '').trim().toLowerCase() === 'test' || Boolean((localStorage.getItem('currentUser') && JSON.parse(localStorage.getItem('currentUser'))?.isAdmin));
-  const isOwnProfile = currentUserId ? String(currentUserId) === String(resolvedId) : false;
+ const isOwnProfile = currentUserId ? String(currentUserId) === String(resolvedId) : false;
 
   const isFriendWithProfile = currentUserId && !isOwnProfile
-    ? friendsList.some((friend) => String(friend.id) === String(currentUserId) || String(friend.friendshipId) === String(currentUserId)) ||
-      (allUsers.find((user) => String(user._id || user.id) === String(currentUserId))?.friends || []).map(String).includes(String(resolvedId))
+    ? friendsList.some((friend) => 
+        String(friend.id) === String(currentUserId) || 
+        String(friend.friendshipId) === String(currentUserId) ||
+        String(friend.id) === String(resolvedId)
+      ) ||
+      allUsers.find((user) => String(user._id || user.id) === String(currentUserId))
+        ?.friends?.map(String).includes(String(resolvedId))
     : false;
 
   const canSeeFullProfile = isOwnProfile || isAdmin || isFriendWithProfile;
@@ -82,9 +87,16 @@ function ProfilePage() {
         }));
 
       const matchedFriends = friendships
-        .filter((friendship) => String(friendship.userId) === String(resolvedId))
+        .filter((friendship) => {
+          const u1 = String(friendship.userId || friendship.user_id);
+          const u2 = String(friendship.friendId || friendship.friend_id);
+          return u1 === String(resolvedId) || u2 === String(resolvedId);
+        })
         .map((friendship) => {
-          const friend = users.find((user) => String(user._id || user.id) === String(friendship.friendId));
+          const u1 = String(friendship.userId || friendship.user_id);
+          const u2 = String(friendship.friendId || friendship.friend_id);
+          const friendUserId = u1 === String(resolvedId) ? u2 : u1;
+          const friend = users.find((user) => String(user._id || user.id) === friendUserId);
           return friend
             ? {
                 friendshipId: String(friendship._id || friendship.id),
@@ -98,9 +110,10 @@ function ProfilePage() {
 
       const currentUserIsFriend = signedInUserId
         ? friendships.some((friendship) => {
-            const left = String(friendship.userId) === String(signedInUserId) && String(friendship.friendId) === String(resolvedId);
-            const right = String(friendship.userId) === String(resolvedId) && String(friendship.friendId) === String(signedInUserId);
-            return left || right;
+            const u1 = String(friendship.userId || friendship.user_id);
+            const u2 = String(friendship.friendId || friendship.friend_id);
+            return (u1 === String(signedInUserId) && u2 === String(resolvedId)) ||
+                   (u1 === String(resolvedId) && u2 === String(signedInUserId));
           })
         : false;
 
@@ -295,7 +308,7 @@ function ProfilePage() {
     }
   };
 
-  const handleAddFriend = async (event) => {
+ const handleAddFriend = async (event) => {
     event.preventDefault();
     if (!currentUserId || !friendTargetId) return;
 
@@ -310,7 +323,20 @@ function ProfilePage() {
       });
 
       if (!response.ok) throw new Error('Failed to add friend');
+
+      const newFriendship = await response.json();
+
+      setFriendsList((prevFriends) => [
+        ...prevFriends,
+        {
+          friendshipId: String(newFriendship._id || newFriendship.id || Date.now()),
+          id: String(friendTargetId),
+          name: availableUsers.find(u => String(u._id || u.id) === String(friendTargetId))?.name || 'Friend'
+        }
+      ]);
+
       setFriendTargetId('');
+      
       await loadData();
     } catch (error) {
       console.error('Failed to add friend:', error);
@@ -527,7 +553,6 @@ function ProfilePage() {
             </div>
           )}
 
-          {/* Captured Posts Grid */}
           <h3 className="[font-family:var(--font-heading)] mb-4 text-2xl text-[#2b2118]">What I've captured</h3>
           {userPosts.length === 0 ? (
             <p className="text-sm italic text-[#6e6052]">No posts published yet.</p>

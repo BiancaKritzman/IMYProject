@@ -65,7 +65,6 @@ function PostPreview({
           View post
         </button>
 
-        {/* Report Button triggers Modal */}
         {onOpenReportModal && (
           <button
             type="button"

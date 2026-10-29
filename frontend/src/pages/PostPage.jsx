@@ -57,13 +57,11 @@ function PostPage() {
         const posts = result.posts || [];
         const albums = result.albums || [];
 
-        // Find post matching id flexibly
         const foundPost = posts.find((item) => {
           const itemId = String(item._id || item.id || '');
           return itemId === String(id);
         });
 
-        // Find album where postIds includes this post's ID or stringified ID
         const foundAlbum = albums.find((item) => {
           const postIds = item.postIds || item.posts || [];
           return postIds.map(String).includes(String(id));
@@ -74,39 +72,37 @@ function PostPage() {
           postIds: [id]
         };
 
+        let activePost = null;
         if (foundPost) {
-          const normalizedPost = {
+          activePost = {
             id: foundPost._id || foundPost.id || id,
             userId: foundPost.userId || foundPost.account_id || '1',
             title: foundPost.title || foundPost.name || foundPost.account_name || 'Untitled Post',
             caption: foundPost.caption || foundPost.description || '',
             description: foundPost.description || foundPost.caption || '',
-            // Check all common image property variants returned by backends
-            imageUrl: foundPost.imageUrl || foundPost.image || foundPost.photoUrl || foundPost.url || '',
+            imageUrl: foundPost.imageUrl || foundPost.image || foundPost.photoUrl || '',
             account_name: foundPost.account_name || foundPost.name || 'User',
             comments: normalizeComments(foundPost.comments || foundPost.commentList || [])
           };
-          setPost(normalizedPost);
-          setAlbum(foundAlbum);
-          setComments(normalizedPost.comments);
         } else {
-          // If post isn't found in API, check if it's stored locally (e.g., newly created posts)
           const localPosts = JSON.parse(localStorage.getItem('createdPosts') || '[]');
           const localPost = localPosts.find(p => String(p.id || p._id) === String(id));
-          
-          if (localPost) {
-            setPost(localPost);
-            setAlbum(foundAlbum);
-          } else {
-            // Ultimate fallback if completely missing
-            setPost({
-              id,
-              title: 'Post Not Found',
-              caption: 'This post could not be retrieved.',
-              imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80'
-            });
-          }
+          activePost = localPost || {
+            id,
+            title: 'Post Not Found',
+            caption: 'This post could not be retrieved.',
+            imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
+            comments: []
+          };
         }
+
+        const savedCommentsMap = JSON.parse(localStorage.getItem('post_comments_map') || '{}');
+        const persistedComments = savedCommentsMap[String(id)];
+        const finalComments = persistedComments !== undefined ? persistedComments : activePost.comments;
+
+        setPost(activePost);
+        setAlbum(foundAlbum);
+        setComments(finalComments);
       } catch (error) {
         console.error('Failed to load post data:', error);
       }
@@ -115,7 +111,7 @@ function PostPage() {
     loadData();
   }, [id]);
 
-  const handleAddComment = (event) => {
+ const handleAddComment = (event) => {
     event.preventDefault();
     const trimmedComment = newComment.trim();
 
@@ -123,14 +119,27 @@ function PostPage() {
       return;
     }
 
-    setComments((previousComments) => [
-      ...previousComments,
-      {
-        id: Date.now(),
-        author: 'You',
-        text: trimmedComment
-      }
-    ]);
+    const storedUser = localStorage.getItem('currentUser');
+    const currentUser = storedUser ? JSON.parse(storedUser) : null;
+    
+    const authorName = currentUser?.name || currentUser?.email?.split('@')[0] || 'User';
+
+    const newCommentObj = {
+      id: Date.now(),
+      author: authorName, 
+      text: trimmedComment
+    };
+
+    setComments((previousComments) => {
+      const updatedComments = [...previousComments, newCommentObj];
+
+      const savedCommentsMap = JSON.parse(localStorage.getItem('post_comments_map') || '{}');
+      savedCommentsMap[String(id)] = updatedComments;
+      localStorage.setItem('post_comments_map', JSON.stringify(savedCommentsMap));
+
+      return updatedComments;
+    });
+
     setNewComment('');
   };
 
